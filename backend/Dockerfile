@@ -1,0 +1,32 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+ARG APT_MIRROR=
+ARG APT_SECURITY_MIRROR=
+ARG PIP_INDEX_URL=https://pypi.org/simple
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PIP_INDEX_URL=${PIP_INDEX_URL}
+
+# Optional apt mirror for faster install in CN networks.
+RUN if [ -n "$APT_MIRROR" ]; then \
+            sed -i "s|http://deb.debian.org/debian|$APT_MIRROR|g" /etc/apt/sources.list.d/debian.sources; \
+        fi; \
+        if [ -n "$APT_SECURITY_MIRROR" ]; then \
+            sed -i "s|http://security.debian.org/debian-security|$APT_SECURITY_MIRROR|g" /etc/apt/sources.list.d/debian.sources; \
+        fi
+
+# Install system dependencies (gcc for building some python packages if needed)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

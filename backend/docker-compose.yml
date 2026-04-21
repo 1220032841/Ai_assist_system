@@ -1,0 +1,43 @@
+services:
+  db:
+    build:
+      context: .
+      dockerfile: Dockerfile.db
+      args:
+        APT_MIRROR: ${APT_MIRROR:-http://mirrors.ustc.edu.cn/debian}
+        APT_SECURITY_MIRROR: ${APT_SECURITY_MIRROR:-http://mirrors.ustc.edu.cn/debian-security}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=app
+    ports:
+      - "5432:5432"
+
+  backend:
+    build:
+      context: .
+      args:
+        APT_MIRROR: ${APT_MIRROR:-http://mirrors.ustc.edu.cn/debian}
+        APT_SECURITY_MIRROR: ${APT_SECURITY_MIRROR:-http://mirrors.ustc.edu.cn/debian-security}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+    volumes:
+      - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock # Allow backend to spawn sibling containers
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/app
+      - SECRET_KEY=changethis
+      - LLM_PROVIDER=${LLM_PROVIDER:-deepseek}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_BASE_URL=${LLM_BASE_URL:-https://api.deepseek.com}
+      - LLM_CHAT_MODEL=${LLM_CHAT_MODEL:-deepseek-chat}
+      - LLM_EMBEDDING_MODEL=${LLM_EMBEDDING_MODEL:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:

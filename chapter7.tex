@@ -1,0 +1,29 @@
+﻿\chapter{System Testing and Result Analysis}
+
+
+\section{Testing Objectives and Testing Plan}
+
+This chapter evaluates three main questions: whether the system can stably run the core teaching workflow, whether grading and feedback are pedagogically usable, and whether instructor-side functions support daily operation. Accordingly, testing uses a combined strategy of functional integration testing, scenario validation, and deployment validation, rather than isolated endpoint checks.
+
+Testing workflows are designed separately for students and instructors. Student-side tests focus on login, assignment viewing, code submission, and result viewing; instructor-side tests focus on class management, student management, score review, and report navigation. In addition, local deployment and online deployment tests are conducted to confirm consistent front-end/back-end behavior across environments.
+
+\section{Functional Test Results}
+
+Integration results indicate that the core workflow has formed a stable closed loop. After student submission, the system completes execution, static analysis, grading, and feedback generation; result pages display runtime outputs, static issues, and final scores. On the instructor side, submission status can be reviewed by class and assignment, with drill-down to single-submission detail pages.
+
+Regarding account and permission boundaries, behavior is largely as expected. Students can access only personal submission data, while instructors can complete management operations through class and student endpoints. For common abnormal operations (e.g., deleting submissions, bulk deletion, querying non-existing records), the system returns clear error messages, with no obvious unauthorized data exposure observed.
+
+For fairness-related scenarios, template and blank-submission detection is specifically validated. Results show that when submissions are highly similar to templates or lack effective new code, warnings are triggered and static-analysis scores are reduced. When submissions contain syntax errors but still show meaningful implementation intent, static-analysis scores are not zeroed unconditionally. This is consistent with the design goal of balancing result correctness and process evaluation.
+
+\section{Stability and Deployment Usability Analysis}
+
+In terms of stability, after repeated submission and query rounds, major APIs remained responsive without frequent interruption. Since scoring includes model invocation, single feedback generation latency can exceed ordinary query latency. However, frontend timeout messaging and result-page refresh mechanisms reduce user-perceived risk, and interaction remains acceptable.
+
+In terms of deployment usability, two operational paths are validated: one-click local startup and online containerized deployment. The former is suitable for development and classroom demonstration, while the latter is suitable for off-campus access. During tests, the three-service Docker Compose structure starts reliably, and same-origin reverse proxy avoids extra CORS complexity. Combined with health checks and log tracing, the system has baseline operational observability.
+
+\section{Discussion and Improvement Directions}
+
+Although the system has reached a usable baseline for course application, several optimization points remain. First, feedback quality is still influenced by model service status and retrieval quality; in some edge cases, suggestions are not specific enough. Second, current performance testing is mainly conducted at course-scale integration level and does not yet cover higher concurrency and longer continuous runtime.
+
+Future improvements can proceed along two directions: optimizing course corpus and retrieval strategies, and adding automated stress-testing scripts. These improvements are expected to move the system from merely "usable" to "more practical" for long-term real-world teaching.
+

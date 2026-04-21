@@ -1,0 +1,56 @@
+﻿\chapter{Database and API Design}
+
+
+\section{Overall Database Design}
+
+The database uses PostgreSQL and follows a teaching-process-oriented modeling principle, forming a traceable data loop over users, assignments, submissions, evaluation, and feedback. In addition to supporting student submission and result query, it supports instructor-side management and statistics by class, assignment, and student dimensions.
+
+Core entities include users, classes, courses, assignments, submissions, execution results, static-analysis results, feedback, and document corpora. These entities are linked through primary and foreign keys. For example, each submission is linked to both student and assignment, and feedback/execution results are one-to-one with submissions. This ensures each score can be traced back to concrete submission context for review and interpretation.
+
+The relational organization is clear:
+
+\begin{enumerate}
+\item Users and courses are connected through enrollment relations, supporting future multi-course expansion.
+\item Course-to-assignment is one-to-many, supporting multiple assignments per course.
+\item Student-to-submission is one-to-many, supporting versioned submissions.
+\item Submission-to-execution/static/feedback is one-to-one, ensuring unique and direct result query.
+\end{enumerate}
+
+
+This modeling approach balances business readability and implementation maintainability. Future scoring dimensions or analysis modules can be integrated smoothly through extension tables around the main submission chain.
+
+\section{Core Tables and Field Description}
+
+In the current implementation, key tables are summarized as follows:
+
+\begin{enumerate}
+\item User/organization tables: users, class\\_groups, courses, enrollments (identity, class grouping, course relation).
+\item Assignment/rubric tables: assignments, rubrics (assignment metadata and grading configuration).
+\item Submission/result tables: submissions, execution\\_results, static\\_analysis\\_results, feedbacks (code versions, runtime outcomes, static issues, final feedback).
+\item Retrieval-corpus table: documents (course documents and embeddings for RAG retrieval).
+\end{enumerate}
+
+
+Among these, submissions is the center of the whole pipeline. It stores assignment\\_id, student\\_id, language, version, and created\\_at, clearly representing who submitted which assignment version and when. The associated execution\\_results, static\\_analysis\\_results, and feedbacks tables allow simultaneous presentation of runtime status, code-quality information, and pedagogical feedback, avoiding over-compression into a single output.
+
+To support class-based teaching management, the users table retains class\\_name, while class\\_groups maintains class sets. Under current course scale, this design has relatively low implementation cost and short query paths, and it supports direct class-based filtering on the instructor side.
+
+\section{API Design and Access Control}
+
+The backend APIs are implemented with FastAPI and organized into five business domains: login, users, assignments, submissions, and analytics. The organization follows a "clear path, single responsibility" principle for easier frontend integration and maintenance.
+
+Main API paths in the current version include:
+
+\begin{enumerate}
+\item Authentication API: /login/access-token for login and token issuance.
+\item User APIs: /users for registration, profile maintenance, class management, and student management.
+\item Assignment APIs: /assignments for assignment list retrieval.
+\item Submission APIs: /submissions for submission creation, list query, detail query, and bulk deletion.
+\item Analytics APIs: /analytics for gradebook, student submission details, and class performance statistics.
+\end{enumerate}
+
+
+Access control is role-based. Students primarily access submission and personal endpoints; instructors access class and student management endpoints; some analytics endpoints require higher-level permissions. This layered control satisfies teaching-management needs while preventing unauthorized student access to others' data.
+
+For data consistency, submission deletions cascade through execution, static-analysis, and feedback records to avoid orphan data. Combined with foreign-key constraints and transactional commits, the system maintains stable integrity under common teaching operations.
+

@@ -1,0 +1,269 @@
+\appendix
+\chapter{Appendix: Core Functional Code Excerpts}
+
+This appendix includes only function-related backend code excerpts that directly support the teaching workflow of this project. Following supervisor guidance, database schema code, frontend pages, and deployment/network configuration are intentionally omitted.
+
+\section{Submission-to-Grading Orchestration}
+The following excerpt shows the core pipeline after a student submission: code normalization, execution, static analysis, blank/template detection, static score calculation, and final grading trigger.
+
+\begin{verbatim}
+@router.post("/", response_model=submission_schema.SubmissionDetail)
+async def create_submission(...):
+    assignment_stmt = select(Assignment).where(Assignment.id == submission_in.assignment_id)
+    assignment_result = await db.execute(assignment_stmt)
+    assignment = assignment_result.scalars().first()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    version_stmt = select(func.max(Submission.version)).where(
+        Submission.assignment_id == submission_in.assignment_id,
+        Submission.student_id == current_user.id,
+    )
+    version_result = await db.execute(version_stmt)
+    next_version = (version_result.scalar() or 0) + 1
+
+    normalized_code = _normalize_submission_code(submission_in.code_content,
+                                                 submission_in.language)
+    if not normalized_code.strip():
+        raise HTTPException(status_code=400, detail="Code content cannot be empty")
+
+    submission = Submission(
+        assignment_id=submission_in.assignment_id,
+        student_id=current_user.id,
+        code_content=normalized_code,
+        language=submission_in.language,
+        version=next_version,
+    )
+    db.add(submission)
+    await db.commit()
+    await db.refresh(submission)
+
+    stdout, stderr, exit_code = execution_service.run_code(submission.code_content,
+                                                           submission.language)
+    execution_result = ExecutionResult(
+        submission_id=submission.id,
+        stdout=stdout,
+        stderr=stderr,
+        exit_code=exit_code
+    )
+    db.add(execution_result)
+
+    analysis_summary = static_analyzer.analyze(submission.code_content, submission.language)
+
+    starter_code = _get_assignment_starter_code(submission.assignment_id, submission.language)
+    student_non_template_line_count = None
+    template_only_submission = False
+    cpp_non_template_code = normalized_code
+    if starter_code:
+        non_template_code, student_non_template_line_count, template_only_submission = \
+            _extract_non_template_code(
+                submitted_code=normalized_code,
+                starter_code=starter_code,
+                language=submission.language,
+            )
+
+    if template_only_submission:
+        base_score = 0
+    elif student_non_template_line_count == 0:
+        base_score = 0
+    elif submission.language == "cpp":
+        base_score = _score_cpp_static_analysis(
+            code=cpp_non_template_code,
+            analysis_summary=analysis_summary,
+            assignment_id=submission.assignment_id,
+        )
+    elif has_syntax_error:
+        non_empty_lines = [line for line in normalized_code.splitlines() if line.strip()]
+        base_score = 50 if len(non_empty_lines) >= 10 else 35
+    else:
+        base_score -= (analysis_summary.get('error_count', 0) * 12)
+        base_score -= (analysis_summary.get('warning_count', 0) * 3)
+        base_score -= (analysis_summary.get('convention_count', 0) * 1)
+
+    static_result = StaticAnalysisResult(
+        submission_id=submission.id,
+        issues=analysis_summary,
+        score=base_score
+    )
+    db.add(static_result)
+    await db.commit()
+
+    await grading_service.grade_submission(db, submission_loaded)
+    return final_result.scalars().first()
+\end{verbatim}
+
+\section{C++ Static Score Function (Logic-First)}
+This scoring function is a representative implementation of "correctness-process balance". It gives logic points for key programming constructs and assignment-specific structure, then applies capped penalties for static issues, so syntax mistakes do not fully erase algorithmic intent.
+
+\begin{verbatim}
+def _score_cpp_static_analysis(code: str, analysis_summary: dict, assignment_id: int) -> int:
+    normalized = (code or "").lower()
+    non_empty_lines = [line for line in (code or "").splitlines() if line.strip()]
+
+    logic_points = 0
+    if "#include" in normalized:
+        logic_points += 8
+    if "int main" in normalized:
+        logic_points += 12
+    if "while" in normalized or "for" in normalized:
+        logic_points += 8
+    if "return" in normalized:
+        logic_points += 4
+
+    # Assignment-specific signals
+    if assignment_id == 1:
+        if "my_strlen" in normalized:
+            logic_points += 16
+        if "my_strcpy" in normalized:
+            logic_points += 16
+    ...
+
+    logic_points = min(logic_points, 70)
+    base_score = 25 + logic_points
+
+    error_count = int(analysis_summary.get("error_count", 0) or 0)
+    warning_count = int(analysis_summary.get("warning_count", 0) or 0)
+    convention_count = int(analysis_summary.get("convention_count", 0) or 0)
+
+    penalty = min(18, error_count*1.5 + warning_count*0.75 + convention_count*0.3)
+    score = round(base_score - penalty)
+
+    if logic_points >= 40 and score < 60: score = 60
+    if logic_points >= 55 and score < 70: score = 70
+
+    if not non_empty_lines:
+        return 0
+
+    return max(0, min(100, score))
+\end{verbatim}
+
+\section{Hidden Test Evaluation (Functional Correctness Evidence)}
+The next excerpt shows hidden-test execution for C++ assignments. The system compiles student code, executes black-box inputs, compares normalized outputs, and counts pass cases. This output is used as objective evidence for final correctness scoring.
+
+\begin{verbatim}
+def _evaluate_cpp_hidden_tests(self, assignment_id: int, code: str) -> Dict[str, Any]:
+    cases_by_assignment = {
+        1: [("hello\\n", "len=5 copy=hello"), ("abc\\n", "len=3 copy=abc")],
+        2: [("5\\n1 2 3 4 5\\n", "3.00"), ("4\\n1 1 2 2\\n", "1.50")],
+        ...
+    }
+
+    compile_proc = subprocess.run(
+        ["g++", "-std=c++17", cpp_path, "-O2", "-o", bin_path],
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    if compile_proc.returncode != 0:
+        return {
+            "pass_count": 0,
+            "total": len(cases),
+            "cases": [],
+            "error": (compile_proc.stderr or "Compile failed").strip(),
+        }
+
+    results = []
+    for test_input, expected in cases:
+        try:
+            run_proc = subprocess.run(
+                [bin_path],
+                input=test_input,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            actual = self._normalize_output(run_proc.stdout)
+            expected_norm = self._normalize_output(expected)
+            ok = (run_proc.returncode == 0) and (actual == expected_norm)
+            results.append(
+                {
+                    "input": test_input.strip(),
+                    "expected": expected,
+                    "actual": run_proc.stdout.strip(),
+                    "ok": ok,
+                    "exit_code": run_proc.returncode,
+                }
+            )
+        except subprocess.TimeoutExpired:
+            results.append(
+                {
+                    "input": test_input.strip(),
+                    "expected": expected,
+                    "actual": "<timeout>",
+                    "ok": False,
+                    "exit_code": 124,
+                }
+            )
+
+    return {
+        "pass_count": sum(1 for c in results if c["ok"]),
+        "total": len(results),
+        "cases": results,
+        "error": None,
+    }
+\end{verbatim}
+
+\section{Static Analysis Entry (Python/C++ Unified Interface)}
+The static analysis module uses a language-dependent path (Pylint for Python, g++ syntax check for C++) and returns a uniform issue summary for downstream scoring and feedback.
+
+\begin{verbatim}
+class StaticAnalyzer:
+    def analyze(self, code: str, language: str = "python") -> Dict[str, Any]:
+        if language == "cpp":
+            proc = subprocess.run(
+                ["g++", "-std=c++17", "-Wall", "-Wextra", "-fsyntax-only", tmp_path],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            stderr = (proc.stderr or "").strip()
+            if stderr:
+                for raw_line in stderr.splitlines():
+                    line = raw_line.strip()
+                    if not line:
+                        continue
+                    issue_type = "warning" if "warning:" in line else "error"
+                    issues.append(
+                        {
+                            "type": issue_type,
+                            "message": line,
+                            "symbol": "gxx-syntax-check",
+                        }
+                    )
+        else:
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "pylint",
+                    tmp_path,
+                    "--output-format=json",
+                    "--score=n",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            output_str = (proc.stdout or "").strip()
+            if output_str:
+                parsed = json.loads(output_str)
+                if isinstance(parsed, list):
+                    issues = parsed
+
+        return {
+            "issues": issues,
+            "error_count": count_type(issues, "error"),
+            "warning_count": count_type(issues, "warning"),
+            "convention_count": count_type(issues, "convention"),
+            "refactor_count": count_type(issues, "refactor"),
+        }
+\end{verbatim}
+
+\section{Appendix Usage Note}
+If your main manuscript file uses chapter includes, add this file after Chapter 9 and before references. A typical placement is:
+
+\begin{verbatim}
+\input{chapter9.tex}
+\input{appendix.tex}
+\input{reference.tex}
+\end{verbatim}

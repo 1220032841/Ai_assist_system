@@ -1,0 +1,99 @@
+﻿\chapter{System Requirements and Overall Architecture}
+
+
+\section{Requirements Analysis}
+
+The system is designed for day-to-day programming-course teaching and primarily serves students and instructors. Students mainly care about smooth submission, clear feedback, and timely results, while instructors care more about convenient class/assignment management, stable grading behavior, and traceable workflows.
+
+Based on practical usage scenarios, the system objectives can be summarized as follows:
+
+\begin{enumerate}
+\item Support a complete closed loop from submission to grading feedback.
+\item Ensure grading results are interpretable and reviewable.
+\item Support continuous instructor-side management of classes, students, and assignments.
+\item Support online deployment and off-campus access for home-use scenarios.
+\end{enumerate}
+
+
+\paragraph{Student-side Functional Requirements}
+Core student requirements include:
+
+\begin{enumerate}
+\item Account login and student registration.
+\item Assignment list viewing and code submission.
+\item Result viewing, including runtime output, static-analysis score, final score, and AI feedback.
+\item Basic profile maintenance (e.g., name).
+\end{enumerate}
+
+
+\paragraph{Instructor-side Functional Requirements}
+In addition to score review, instructors require complete management capabilities:
+
+\begin{enumerate}
+\item Instructor login and role-based authentication.
+\item Class management: create, rename, delete, add/remove students.
+\item Student management: view student details, review submission records, delete abnormal accounts.
+\item Assignment-view dashboard: review student status and scores by assignment.
+\item Report viewing: jump directly to detailed submission reports.
+\item Grade export: CSV export for offline statistics.
+\end{enumerate}
+
+
+\paragraph{Non-functional Requirements}
+Besides business functions, the system should satisfy:
+
+\begin{enumerate}
+\item Stability: maintain service availability under repeated submission scenarios.
+\item Security: execute untrusted code in controlled environments rather than host runtime.
+\item Consistency: keep scoring rules reproducible and avoid large fluctuations across similar submissions.
+\item Scalability: support future expansion to more problems, languages, and finer analysis rules.
+\item Deployability: support Docker-based deployment and public-access configuration.
+\end{enumerate}
+
+
+\section{Overall System Architecture}
+
+The system adopts a front-end/back-end separated architecture with four layers:
+
+\begin{enumerate}
+\item Presentation layer: student and instructor interfaces for interaction and result display.
+\item Service layer: authentication, submission processing, scoring feedback, and management APIs.
+\item Data layer: PostgreSQL persistence for users, assignments, submissions, feedback, and classes.
+\item Retrieval/feedback layer: AI feedback generation grounded in course-document retrieval.
+\end{enumerate}
+
+
+At the deployment layer, services are orchestrated by Docker Compose. The frontend uses Nginx to proxy backend APIs, enabling quick startup in local or public environments.
+
+\section{Core Workflow Design}
+
+
+\paragraph{Submission Workflow}
+After code submission, backend processing follows these steps:
+
+\begin{enumerate}
+\item Validate assignment and user identity.
+\item Store submission version and code content.
+\item Execute code via execution service.
+\item Generate issue list and static score via static-analysis module.
+\item Compute final score via grading module.
+\item Generate RAG-based feedback and write it to the database.
+\end{enumerate}
+
+
+This workflow ensures each submission is traceable and reviewable.
+
+\paragraph{Scoring Workflow}
+A two-track strategy is used:
+
+\begin{enumerate}
+\item Final score: based mainly on hidden test outcomes, reflecting functional correctness.
+\item Static-analysis score: reflecting code quality and implementation process, without replacing the final score.
+\end{enumerate}
+
+
+To prevent inflated scores from template-only submissions, blank-submission detection is applied. If only template content or no effective new code is detected, static-analysis scores are significantly reduced or set to zero, and a warning is shown on the result page.
+
+\paragraph{Instructor Management Workflow}
+The instructor workbench links class, assignment, and student views. It supports class-based filtering, assignment-based review, and student-level drill-down to detailed submission reports, integrating score review and teaching management in one interface workflow.
+

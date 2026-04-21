@@ -1,0 +1,35 @@
+﻿\chapter{System Implementation and Deployment}
+
+
+\section{Backend Core Implementation}
+
+The backend is implemented with FastAPI using an "interface-layer separation + service modularization" organization. Routes are divided into five modules: login, users, assignments, submissions, and analytics, corresponding to authentication, account/class management, assignment retrieval, evaluation pipeline, and instructor statistical views. This modular structure improves responsibility clarity and makes iterative maintenance easier.
+
+In the submission chain, processing follows a fixed order: validate assignment and user, create submission record, execute code, perform static analysis, and generate grading feedback. To ensure traceability, execution outputs, static issues, and final feedback are stored in separate result tables and linked by submission\\_id. This enables instructors to review full process details instead of only aggregated scores.
+
+The backend also includes startup-time schema compatibility logic (e.g., auto-adding class\\_name and auto-creating class\\_groups). This improves usability in legacy database environments and reduces startup failures caused by schema-version mismatch during iterative development.
+
+\section{Frontend Functional Implementation}
+
+The frontend is implemented with Vue3 and organized around two major scenarios: student-side and instructor-side usage. Student pages focus on login, assignment viewing, code submission, and result viewing; instructor pages focus on class management, student management, assignment score review, and submission detail drill-down. Interaction paths are intentionally shortened to reduce page-hopping for instructors.
+
+At request level, the frontend uses a unified Axios wrapper for backend API calls, with interceptors for token injection, timeout prompts, and authentication-failure redirection. Since scoring may involve model invocation, API timeout settings are moderately relaxed; timeout messages advise users to retry or refresh the result page, reducing false perceptions of system failure.
+
+During integration, the frontend defaults to /api/v1 as API base path. This supports both local development and online same-origin reverse-proxy deployment, reducing CORS complexity and improving consistency between debugging and production behavior.
+
+\section{Containerization and Online Deployment}
+
+Deployment is orchestrated by Docker Compose with three core services: db, backend, and frontend. The database service handles persistence, the backend service handles APIs and evaluation workflows, and the frontend service serves static resources via Nginx while proxying /api to backend. Only port 80 is exposed externally; backend and database are not directly exposed to the public network, improving security controllability.
+
+For image builds, the backend uses Python 3.11 and runs with Uvicorn; the frontend builds with Node and serves static files through Nginx. Online compose files unify configuration for database connection, token parameters, model invocation parameters, and CORS options. Deployment settings are environment-variable-driven for reuse across machines.
+
+In practice, this "three-container + reverse-proxy" structure balances maintainability and reproducibility. The same core architecture works across local demos, intranet tunneling, and public server deployment, reducing environment-related integration variance.
+
+\section{Startup Scripts and Operation Maintenance}
+
+To reduce deployment barriers, the project provides one-click PowerShell and batch scripts. Startup scripts automatically check Docker status, validate .env.online configuration, run container startup and migration processes, and output access URLs after local health checks pass. In classroom demos, this significantly reduces command-level operation errors.
+
+For off-campus access, the system supports both direct public-server access and intranet tunneling to local services. In practice, as long as frontend ports are reachable and reverse-proxy paths are consistent, students and instructors can complete login, submission, and result review via one unified entry point.
+
+At operation level, standard commands for container status, log tracing, and service shutdown are retained for rapid issue diagnosis. Overall, the project has established a basic operations loop of "startable, reviewable, recoverable," sufficient for demonstration and small-scale teaching use.
+

@@ -1,0 +1,52 @@
+﻿\chapter{Introduction}
+
+
+\section{Research Background}
+
+Programming courses are core components of computer science education. In actual teaching practice, however, instructors commonly face two practical pressures: increasing student numbers and higher expectations for feedback quality. For programming assignments, numerical scores alone are usually insufficient; students need to know what is wrong, why it is wrong, and how to improve. This is especially true for beginners. Even when code runs successfully, many submissions still require improvement in structure, naming, and readability. Manual grading requires line-by-line review and written comments, which is highly time-consuming and difficult to keep timely, stable, and fine-grained in large classes.
+
+Existing automatic grading systems are already relatively mature and can produce quick results through compilation and test cases. However, their feedback is often limited to pass/fail outcomes or short error messages. For novice learners, such feedback is not always truly helpful: students may know that a submission failed but still not understand the root cause; even if a submission passes all tests, the implementation may still be suboptimal. Therefore, improving feedback quality while retaining automation efficiency has become a key issue in digital programming education.
+
+In recent years, large language models have shown strong performance in code understanding and generation, offering new possibilities for automated, explanatory, and personalized feedback. Yet direct use of general-purpose models in teaching can still lead to problems such as out-of-syllabus suggestions, terminology misalignment with course content, and unstable conclusions. For undergraduate teaching, a system should not only "answer," but answer accurately, consistently, and appropriately. This requires integrating model capabilities with course boundaries, grading rules, and actual teaching workflows.
+
+\section{Research Motivation and Problem Definition}
+
+The starting point of this project is a practical teaching contradiction: instructors need timely and high-quality feedback, but manual grading is costly; automated systems are efficient, but often lack depth and pedagogical alignment. Based on this contradiction, this thesis focuses on the following questions:
+
+\begin{enumerate}
+\item How can a stable automatic grading and feedback pipeline be built to form an end-to-end closed loop from submission to feedback?
+\item How can grading balance "result correctness" and "process quality," avoiding over-reliance on either final outcomes or process scoring?
+\item How can course documents be integrated into feedback generation to reduce out-of-scope suggestions and improve alignment with course content?
+\item How can the instructor side provide a practical management view so that teachers can review not only scores but also submission details, student status, and class-level progress?
+\end{enumerate}
+
+
+This thesis does not aim primarily at algorithmic novelty. Instead, it emphasizes practical deployment and teaching usability by designing and implementing an end-to-end system and iteratively improving it through real usage workflows.
+
+\section{Research Objectives and Main Contributions}
+
+The overall objective of this thesis is to design and implement an AI-assisted programming teaching system that supports an integrated workflow of "automatic grading + explanatory feedback + instructor management" in undergraduate course settings. To achieve this goal, this work completes the following:
+
+\begin{enumerate}
+\item Designs backend services and data models for user identity management, assignment management, submission records, grading results, and feedback storage.
+\item Implements core processes including code execution, static analysis, and hidden-test grading to form an automatic post-submission evaluation mechanism.
+\item Proposes a layered scoring strategy that separates final correctness scores from static-analysis scores to improve pedagogical interpretability.
+\item Introduces an RAG-based feedback generation pipeline so that AI feedback is grounded in course documents and remains context-aligned.
+\item Implements key instructor-workbench functions, including class management, student management, assignment score review, student detail review, and report navigation.
+\item Completes containerized deployment and public-access adaptation, enabling off-campus usage for both students and instructors.
+\end{enumerate}
+
+
+\section{Features and Practical Value of This Work}
+
+Compared with implementations that focus only on isolated scoring modules, this thesis emphasizes system completeness and pedagogical adaptation in three major aspects:
+
+\begin{enumerate}
+\item End-to-end engineering closure: covering the full chain of submission, execution, grading, feedback, management, and deployment, rather than a single algorithm experiment.
+\item Explicit teaching-oriented rules: improving grading consistency through blank-submission detection, template comparison, hidden tests, and separated static-analysis scoring.
+\item Practical-use orientation: supporting public deployment and multi-role access under real course usage conditions.
+\end{enumerate}
+
+
+From a practical perspective, the system can reduce instructor workload in repetitive grading tasks, improve feedback timeliness, and provide structured data for subsequent learning analytics (e.g., common error statistics and learning trajectory observation).
+
