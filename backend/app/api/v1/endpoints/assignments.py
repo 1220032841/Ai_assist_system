@@ -14,6 +14,18 @@ router = APIRouter()
 SUPPORTED_ASSIGNMENT_LANGUAGES = {"cpp", "python"}
 
 
+def _normalized_role(role: Any) -> str:
+    return str(getattr(role, "value", role) or "").strip().lower()
+
+
+def _is_admin(user: User) -> bool:
+    return _normalized_role(user.role) == "admin"
+
+
+def _is_instructor(user: User) -> bool:
+    return _normalized_role(user.role) == "instructor"
+
+
 def _normalize_assignment_language(language: Optional[str]) -> str:
     normalized = (language or "cpp").strip().lower()
     if normalized not in SUPPORTED_ASSIGNMENT_LANGUAGES:
@@ -50,7 +62,15 @@ async def read_assignments(
     """
     Retrieve all assignments for the current course set.
     """
-    result = await db.execute(select(Assignment).order_by(Assignment.id.asc()))
+    stmt = select(Assignment).order_by(Assignment.id.asc())
+    if _is_instructor(current_user):
+        stmt = (
+            select(Assignment)
+            .join(Course, Course.id == Assignment.course_id)
+            .where(Course.instructor_id == current_user.id)
+            .order_by(Assignment.id.asc())
+        )
+    result = await db.execute(stmt)
     return result.scalars().all()
 
 
@@ -95,7 +115,7 @@ async def create_assignment(
         course = course_result.scalars().first()
         if not course:
             raise HTTPException(status_code=404, detail="Course not found")
-        if current_user.role != "admin" and course.instructor_id != current_user.id:
+        if not _is_admin(current_user) and course.instructor_id != current_user.id:
             raise HTTPException(status_code=403, detail="Not allowed to create assignment for this course")
     else:
         course_result = await db.execute(
@@ -145,7 +165,7 @@ async def delete_assignment(
     course = course_result.scalars().first()
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
-    if current_user.role != "admin" and course.instructor_id != current_user.id:
+    if not _is_admin(current_user) and course.instructor_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not allowed to delete this assignment")
 
     submission_ids = (

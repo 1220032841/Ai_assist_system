@@ -36,15 +36,18 @@ service.interceptors.response.use(
 
         if (error.response) {
             const { status, data } = error.response
-            if (status === 401 || status === 403) {
-                const detail = data?.detail || ''
-                if (status === 403 || detail === 'Could not validate credentials') {
+            const detail = data?.detail || ''
+            const invalidCredentials = detail === 'Could not validate credentials'
+            if (status === 401 || invalidCredentials) {
+                if (invalidCredentials) {
                     ElMessage.error('登录态已失效，请重新登录')
                 } else {
                     ElMessage.error('Session expired, please login again')
                 }
                 localStorage.removeItem('token')
                 window.location.href = '/login'
+            } else if (status === 403) {
+                ElMessage.error(detail || '没有权限执行此操作')
             } else {
                 ElMessage.error(data.detail || 'Error')
             }
