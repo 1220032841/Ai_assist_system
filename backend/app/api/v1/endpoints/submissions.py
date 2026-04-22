@@ -5,6 +5,7 @@ from sqlalchemy import select, func, delete
 from sqlalchemy.orm import selectinload
 from textwrap import dedent
 import ast
+import logging
 import re
 from typing import Optional, Tuple
 
@@ -15,6 +16,7 @@ from app.schemas import submission as submission_schema
 from app.services.execution.runner import execution_service
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 async def _delete_submission_related_rows(db: AsyncSession, submission_id: int) -> None:
@@ -615,7 +617,26 @@ async def create_submission(
     result = await db.execute(stmt)
     submission_loaded = result.scalars().first()
 
-    await grading_service.grade_submission(db, submission_loaded)
+    try:
+        await grading_service.grade_submission(db, submission_loaded)
+    except Exception as exc:
+        logger.exception("Grading failed for submission_id=%s", submission.id)
+        await db.rollback()
+
+        score_result = grading_service._score_submission(submission_loaded)
+        fallback_feedback = Feedback(
+            submission_id=submission.id,
+            content=(
+                "AI 反馈暂时生成失败，但本次提交已保存。\n\n"
+                f"系统错误信息: {str(exc)}\n\n"
+                "你可以稍后刷新结果页，或重新提交一次以再次触发反馈生成。"
+            ),
+            citations=[],
+            grade_breakdown=score_result["breakdown"],
+            final_score=score_result["final_score"],
+        )
+        db.add(fallback_feedback)
+        await db.commit()
 
     final_stmt = (
         select(Submission)

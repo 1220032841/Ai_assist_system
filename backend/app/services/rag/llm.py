@@ -15,7 +15,18 @@ class LLMService:
         ).lower()
         code_text = submission.code_content or ""
         non_empty_lines = [line for line in code_text.splitlines() if line.strip()]
-        static_issues = (static_analysis.issues if static_analysis and static_analysis.issues else "").strip().lower()
+
+        issue_payload = static_analysis.issues if static_analysis else None
+        if isinstance(issue_payload, dict):
+            issue_items = issue_payload.get("issues", [])
+            error_count = int(issue_payload.get("error_count", 0) or 0)
+            warning_count = int(issue_payload.get("warning_count", 0) or 0)
+            convention_count = int(issue_payload.get("convention_count", 0) or 0)
+        else:
+            issue_items = issue_payload if isinstance(issue_payload, list) else []
+            error_count = 0
+            warning_count = 0
+            convention_count = 0
 
         beginner_keywords = [
             "hello world",
@@ -28,7 +39,8 @@ class LLMService:
         ]
         has_beginner_signal = any(keyword in assignment_text for keyword in beginner_keywords)
         has_clean_run = execution_result.exit_code == 0 and not (execution_result.stderr or "").strip()
-        has_no_real_static_issue = static_issues in ("", "none", "[]", "{}")
+        has_issue_items = isinstance(issue_items, list) and any(isinstance(item, dict) for item in issue_items)
+        has_no_real_static_issue = not has_issue_items and error_count == 0 and warning_count == 0 and convention_count == 0
 
         return has_clean_run and has_no_real_static_issue and (
             has_beginner_signal or len(non_empty_lines) <= 10
