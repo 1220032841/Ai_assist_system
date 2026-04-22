@@ -5,7 +5,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import deps
-from app.db.models import Assignment, Course, ExecutionResult, Feedback, StaticAnalysisResult, Submission, User
+from app.db.models import Assignment, Course, Enrollment, ExecutionResult, Feedback, StaticAnalysisResult, Submission, User
 from app.db.session import get_db
 from app.schemas import assignment as assignment_schema
 
@@ -24,6 +24,10 @@ def _is_admin(user: User) -> bool:
 
 def _is_instructor(user: User) -> bool:
     return _normalized_role(user.role) == "instructor"
+
+
+def _is_student(user: User) -> bool:
+    return _normalized_role(user.role) == "student"
 
 
 def _normalize_assignment_language(language: Optional[str]) -> str:
@@ -70,6 +74,29 @@ async def read_assignments(
             .where(Course.instructor_id == current_user.id)
             .order_by(Assignment.id.asc())
         )
+    elif _is_student(current_user):
+        enrolled_course_ids = list(
+            (
+                await db.execute(
+                    select(Enrollment.course_id).where(Enrollment.student_id == current_user.id)
+                )
+            ).scalars().all()
+        )
+
+        if enrolled_course_ids:
+            stmt = (
+                select(Assignment)
+                .where(Assignment.course_id.in_(enrolled_course_ids))
+                .order_by(Assignment.id.asc())
+            )
+        else:
+            stmt = (
+                select(Assignment)
+                .join(Course, Course.id == Assignment.course_id)
+                .join(User, User.id == Course.instructor_id)
+                .where(User.role == "instructor")
+                .order_by(Assignment.id.asc())
+            )
     result = await db.execute(stmt)
     return result.scalars().all()
 
