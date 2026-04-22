@@ -77,21 +77,11 @@
           </p>
           <el-progress :percentage="analysisResult.score || 0" :status="getScoreStatus(analysisResult.score || 0)" />
           <p>评分: {{ analysisResult.score }} / 100</p>
-          
-          <div v-if="analysisResult.issues">
-             <h4>发现的问题:</h4>
-             <pre>{{ JSON.stringify(analysisResult.issues, null, 2) }}</pre>
-          </div>
         </div>
         
         <div class="section" v-if="feedbackText">
             <h3>AI 反馈</h3>
           <div class="feedback-content">{{ feedbackText }}</div>
-
-          <div v-if="gradeBreakdown" class="breakdown-block">
-            <h4>评分细则</h4>
-            <pre>{{ JSON.stringify(gradeBreakdown, null, 2) }}</pre>
-          </div>
         </div>
 
         <div class="section" v-else>
@@ -119,7 +109,6 @@ const executionResult = ref<any>(null)
 const analysisResult = ref<any>(null)
 const feedbackText = ref('')
 const finalScore = ref<number | null>(null)
-const gradeBreakdown = ref<any>(null)
 let pollInterval: any = null
 
 const blankSubmissionDetected = computed(() => {
@@ -167,7 +156,6 @@ const fetchResult = async () => {
   analysisResult.value = submission.value.static_analysis || null
   feedbackText.value = submission.value.feedback?.content || ''
   finalScore.value = submission.value.feedback?.final_score ?? null
-  gradeBreakdown.value = submission.value.feedback?.grade_breakdown ?? null
 
     loading.value = false
     
@@ -263,7 +251,4 @@ onUnmounted(() => {
   font-size: 13px;
 }
 
-.breakdown-block {
-  margin-top: 12px;
-}
 </style>

@@ -112,6 +112,10 @@
         </el-tab-pane>
 
         <el-tab-pane label="作业模块" name="assignment">
+          <div class="block-toolbar">
+            <el-button type="primary" @click="openAssignmentDialog">创建作业</el-button>
+          </div>
+
           <el-row :gutter="16" class="module-grid">
             <el-col :span="10">
               <div class="module-panel">
@@ -326,6 +330,36 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="assignmentDialogVisible" title="创建作业" width="520px">
+      <el-form :model="assignmentForm" label-width="90px">
+        <el-form-item label="作业标题">
+          <el-input v-model="assignmentForm.title" placeholder="请输入作业标题" />
+        </el-form-item>
+        <el-form-item label="作业描述">
+          <el-input
+            v-model="assignmentForm.description"
+            type="textarea"
+            :rows="4"
+            placeholder="请输入作业描述"
+          />
+        </el-form-item>
+        <el-form-item label="截止时间">
+          <el-date-picker
+            v-model="assignmentForm.dueDate"
+            type="datetime"
+            placeholder="可选"
+            format="YYYY-MM-DD HH:mm:ss"
+            value-format="YYYY-MM-DDTHH:mm:ss"
+            style="width: 100%"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="assignmentDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="creatingAssignment" @click="submitAssignment">创建</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -355,6 +389,13 @@ const selectedClassName = ref('')
 const assignmentKeyword = ref('')
 const assignmentStudentKeyword = ref('')
 const selectedAssignmentId = ref<number | null>(null)
+const assignmentDialogVisible = ref(false)
+const creatingAssignment = ref(false)
+const assignmentForm = ref({
+  title: '',
+  description: '',
+  dueDate: '',
+})
 
 const studentKeyword = ref('')
 
@@ -601,6 +642,40 @@ const createClassGroup = async () => {
     ElMessage.error(detail || '创建班级失败')
   } finally {
     creatingClass.value = false
+  }
+}
+
+const openAssignmentDialog = () => {
+  assignmentForm.value = {
+    title: '',
+    description: '',
+    dueDate: '',
+  }
+  assignmentDialogVisible.value = true
+}
+
+const submitAssignment = async () => {
+  const title = assignmentForm.value.title.trim()
+  if (!title) {
+    ElMessage.warning('请输入作业标题')
+    return
+  }
+
+  creatingAssignment.value = true
+  try {
+    await request.post('/assignments/', {
+      title,
+      description: assignmentForm.value.description.trim() || null,
+      due_date: assignmentForm.value.dueDate || null,
+    })
+    ElMessage.success('作业创建成功')
+    assignmentDialogVisible.value = false
+    await fetchAssignments()
+  } catch (error: any) {
+    const detail = error?.response?.data?.detail
+    ElMessage.error(detail || '创建作业失败')
+  } finally {
+    creatingAssignment.value = false
   }
 }
 

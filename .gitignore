@@ -29,6 +29,24 @@ Thumbs.db
 # Archives and local dumps
 *.zip
 
+# Local academic and presentation materials that should stay out of the public repo
+/figure/
+/*.pdf
+/*.tex
+/defense_qa_bilingual.md
+/ppt_speaker_notes_cn.md
+/ppt_speaker_notes_en.md
+/fyp_guideline.md
+/paper_snippets.txt
+/progress_report.md
+/proposal_template.md
+/requirements.md
+/STARTUP_GUIDE.md
+/ONLINE_DEPLOYMENT.md
+/thesis_draft_cn.md
+/thesis_draft_en.md
+/temp_config.json
+
 # Logs
 *.log
 npm-debug.log*

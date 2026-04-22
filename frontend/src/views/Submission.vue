@@ -20,10 +20,10 @@
           <div class="text item">
             <h3>{{ currentAssignment.title }}</h3>
             <p>{{ currentAssignment.description }}</p>
-            <p>示例输入: {{ currentAssignment.exampleInput }}</p>
-            <p>示例输出: {{ currentAssignment.exampleOutput }}</p>
-            <p v-if="!isKnownAssignment" class="assignment-hint">
-              未找到该作业配置，已自动加载默认作业模板。
+            <p v-if="currentAssignment.exampleInput">示例输入: {{ currentAssignment.exampleInput }}</p>
+            <p v-if="currentAssignment.exampleOutput">示例输出: {{ currentAssignment.exampleOutput }}</p>
+            <p v-if="loadFailed" class="assignment-hint">
+              未能获取作业详情，已加载默认代码模板。
             </p>
           </div>
         </el-card>
@@ -95,14 +95,44 @@ const assignmentCatalog: Record<number, AssignmentConfig> = {
 const defaultAssignment = assignmentCatalog[1]!
 
 const assignmentId = computed(() => Number(route.query.assignmentId) || 1)
-const isKnownAssignment = computed(() => Boolean(assignmentCatalog[assignmentId.value]))
-const currentAssignment = computed<AssignmentConfig>(
-  () => assignmentCatalog[assignmentId.value] ?? defaultAssignment
-)
+const assignmentDetail = ref<Partial<AssignmentConfig> | null>(null)
+const loadFailed = ref(false)
+const currentAssignment = computed<AssignmentConfig>(() => ({
+  ...defaultAssignment,
+  ...(assignmentDetail.value || {}),
+}))
 
 const language = ref('cpp')
 const code = ref('')
 const submitting = ref(false)
+
+const fetchAssignmentDetail = async () => {
+  loadFailed.value = false
+  assignmentDetail.value = null
+  try {
+    const response = await request.get(`/assignments/${assignmentId.value}`)
+    assignmentDetail.value = {
+      id: response.data.id,
+      title: response.data.title || defaultAssignment.title,
+      description: response.data.description || '暂无作业描述。',
+      exampleInput: '',
+      exampleOutput: '',
+      starterCode: defaultAssignment.starterCode,
+      language: 'cpp',
+    }
+  } catch (error) {
+    loadFailed.value = true
+    assignmentDetail.value = assignmentCatalog[assignmentId.value] ?? defaultAssignment
+  }
+}
+
+watch(
+  assignmentId,
+  () => {
+    fetchAssignmentDetail()
+  },
+  { immediate: true }
+)
 
 watch(
   currentAssignment,
