@@ -74,7 +74,8 @@ class LLMService:
             "This is a very simple beginner exercise or a short correct program. "
             "Do not be overly strict or nitpicky. If the code is correct, clearly say it is correct first. "
             "Do not criticize large-project style conventions such as avoiding using namespace std, adding comments everywhere, architecture, extensibility, or performance tuning unless the assignment explicitly requires them or they cause a real problem. "
-            "If you give improvement advice, keep it optional and limit it to at most one small suggestion."
+            "If the code is correct and simple, do not provide improvement suggestions at all. Just give brief positive confirmation. "
+            "Only provide a suggestion when there is a concrete, user-visible problem in the code or execution result."
             if is_trivial_success_case
             else "Focus on concrete issues that are supported by the code, execution result, static analysis, or course context. If there are no clear problems, say so directly instead of inventing generic style criticism."
         )

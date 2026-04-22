@@ -434,6 +434,46 @@ def _score_cpp_static_analysis(code: str, analysis_summary: dict, assignment_id:
 
     return max(0, min(100, score))
 
+
+def _is_trivial_cpp_success_case(
+    submission: Submission,
+    assignment: Assignment,
+    execution_result: ExecutionResult,
+    analysis_summary: dict,
+) -> bool:
+    if submission.language != "cpp":
+        return False
+
+    if not execution_result or execution_result.exit_code != 0 or (execution_result.stderr or "").strip():
+        return False
+
+    assignment_text = (
+        f"{assignment.title if assignment else ''} "
+        f"{assignment.description if assignment and assignment.description else ''}"
+    ).lower()
+    beginner_keywords = ["hello world", "hello", "first program", "print", "输出", "入门", "第一个"]
+    has_beginner_signal = any(keyword in assignment_text for keyword in beginner_keywords)
+
+    error_count = int(analysis_summary.get("error_count", 0) or 0)
+    warning_count = int(analysis_summary.get("warning_count", 0) or 0)
+    convention_count = int(analysis_summary.get("convention_count", 0) or 0)
+    issues_list = analysis_summary.get("issues", []) if isinstance(analysis_summary, dict) else []
+    has_blank_submission_flag = any(
+        isinstance(issue, dict) and issue.get("symbol") == "blank-submission"
+        for issue in issues_list
+    )
+
+    non_empty_lines = [line for line in (submission.code_content or "").splitlines() if line.strip()]
+    is_short_program = len(non_empty_lines) <= 10
+
+    return (
+        not has_blank_submission_flag
+        and error_count == 0
+        and warning_count == 0
+        and convention_count == 0
+        and (has_beginner_signal or is_short_program)
+    )
+
 @router.post("/", response_model=submission_schema.SubmissionDetail)
 async def create_submission(
     *,
@@ -541,7 +581,16 @@ async def create_submission(
         if isinstance(i, dict)
     )
 
-    if template_only_submission:
+    is_trivial_cpp_success_case = _is_trivial_cpp_success_case(
+        submission=submission,
+        assignment=assignment,
+        execution_result=execution_result,
+        analysis_summary=analysis_summary,
+    )
+
+    if is_trivial_cpp_success_case:
+        base_score = 100
+    elif template_only_submission:
         # Template/sample-only submission should not receive static points.
         base_score = 0
     elif student_non_template_line_count == 0:
