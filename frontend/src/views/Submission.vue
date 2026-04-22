@@ -33,8 +33,9 @@
           <template #header>
             <div class="card-header">
               <span>代码编辑</span>
-              <el-select v-model="language" placeholder="Select" size="small" style="width: 100px">
+              <el-select v-model="language" placeholder="Select" size="small" style="width: 120px" disabled>
                 <el-option label="C++" value="cpp" />
+                <el-option label="Python" value="python" />
               </el-select>
             </div>
           </template>
@@ -69,6 +70,8 @@ const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 
+type AssignmentLanguage = 'cpp' | 'python'
+
 type AssignmentConfig = {
   id: number
   title: string
@@ -76,33 +79,47 @@ type AssignmentConfig = {
   exampleInput: string
   exampleOutput: string
   starterCode: string
-  language: 'cpp'
+  language: AssignmentLanguage
 }
 
-const assignmentCatalog: Record<number, AssignmentConfig> = {
-  1: {
-    id: 1,
-    title: 'C++ 作业：基础加减法',
-    description: '输入两个整数 a 和 b，输出 a+b 和 a-b。',
-    exampleInput: '10 6',
-    exampleOutput: '16 4',
+const defaultAssignmentTemplates: Record<AssignmentLanguage, Omit<AssignmentConfig, 'id'>> = {
+  cpp: {
+    title: 'C++ 作业',
+    description: '请输入题目要求并完成代码实现。',
+    exampleInput: '',
+    exampleOutput: '',
     starterCode:
-      '#include <iostream>\nusing namespace std;\n\nint main() {\n    long long a, b;\n    cin >> a >> b;\n\n    // TODO: 输出 a+b 和 a-b\n\n    return 0;\n}\n',
+      '#include <iostream>\nusing namespace std;\n\nint main() {\n    // TODO: 在这里实现你的逻辑\n    cout << "hello world" << endl;\n    return 0;\n}\n',
     language: 'cpp',
+  },
+  python: {
+    title: 'Python 作业',
+    description: '请输入题目要求并完成代码实现。',
+    exampleInput: '',
+    exampleOutput: '',
+    starterCode:
+      'def solve():\n    # TODO: 在这里实现你的逻辑\n    pass\n\nif __name__ == "__main__":\n    solve()\n',
+    language: 'python',
   },
 }
 
-const defaultAssignment = assignmentCatalog[1]!
+const normalizeAssignmentLanguage = (language?: string): AssignmentLanguage =>
+  language === 'python' ? 'python' : 'cpp'
+
+const buildDefaultAssignment = (id: number, language: AssignmentLanguage = 'cpp'): AssignmentConfig => ({
+  id,
+  ...defaultAssignmentTemplates[language],
+})
 
 const assignmentId = computed(() => Number(route.query.assignmentId) || 1)
 const assignmentDetail = ref<Partial<AssignmentConfig> | null>(null)
 const loadFailed = ref(false)
 const currentAssignment = computed<AssignmentConfig>(() => ({
-  ...defaultAssignment,
+  ...buildDefaultAssignment(assignmentId.value, normalizeAssignmentLanguage(assignmentDetail.value?.language)),
   ...(assignmentDetail.value || {}),
 }))
 
-const language = ref('cpp')
+const language = ref<AssignmentLanguage>('cpp')
 const code = ref('')
 const submitting = ref(false)
 
@@ -111,18 +128,20 @@ const fetchAssignmentDetail = async () => {
   assignmentDetail.value = null
   try {
     const response = await request.get(`/assignments/${assignmentId.value}`)
+    const assignmentLanguage = normalizeAssignmentLanguage(response.data.language)
+    const defaults = buildDefaultAssignment(response.data.id, assignmentLanguage)
     assignmentDetail.value = {
       id: response.data.id,
-      title: response.data.title || defaultAssignment.title,
+      title: response.data.title || defaults.title,
       description: response.data.description || '暂无作业描述。',
-      exampleInput: '',
-      exampleOutput: '',
-      starterCode: defaultAssignment.starterCode,
-      language: 'cpp',
+      exampleInput: response.data.example_input || '',
+      exampleOutput: response.data.example_output || '',
+      starterCode: response.data.starter_code || defaults.starterCode,
+      language: assignmentLanguage,
     }
   } catch (error) {
     loadFailed.value = true
-    assignmentDetail.value = assignmentCatalog[assignmentId.value] ?? defaultAssignment
+    assignmentDetail.value = buildDefaultAssignment(assignmentId.value, 'cpp')
   }
 }
 

@@ -127,6 +127,18 @@
                   <el-table :data="filteredAssignments" v-loading="loading" height="410" @row-click="onAssignmentRowClick">
                     <el-table-column prop="id" label="作业ID" width="90" />
                     <el-table-column prop="title" label="作业标题" min-width="220" />
+                    <el-table-column label="语言" width="110">
+                      <template #default="scope">
+                        {{ scope.row.language === 'python' ? 'Python' : 'C++' }}
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="操作" width="120">
+                      <template #default="scope">
+                        <el-button link type="danger" @click.stop="deleteAssignment(scope.row)">
+                          删除
+                        </el-button>
+                      </template>
+                    </el-table-column>
                   </el-table>
                 </div>
               </div>
@@ -336,12 +348,42 @@
         <el-form-item label="作业标题">
           <el-input v-model="assignmentForm.title" placeholder="请输入作业标题" />
         </el-form-item>
+        <el-form-item label="作业语言">
+          <el-select v-model="assignmentForm.language" style="width: 100%" @change="handleAssignmentLanguageChange">
+            <el-option label="C++" value="cpp" />
+            <el-option label="Python" value="python" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="作业描述">
           <el-input
             v-model="assignmentForm.description"
             type="textarea"
             :rows="4"
             placeholder="请输入作业描述"
+          />
+        </el-form-item>
+        <el-form-item label="示例输入">
+          <el-input
+            v-model="assignmentForm.exampleInput"
+            type="textarea"
+            :rows="2"
+            placeholder="可选，展示给学生的示例输入"
+          />
+        </el-form-item>
+        <el-form-item label="示例输出">
+          <el-input
+            v-model="assignmentForm.exampleOutput"
+            type="textarea"
+            :rows="2"
+            placeholder="可选，展示给学生的示例输出"
+          />
+        </el-form-item>
+        <el-form-item label="代码模板">
+          <el-input
+            v-model="assignmentForm.starterCode"
+            type="textarea"
+            :rows="10"
+            placeholder="请输入学生看到的预设代码模板"
           />
         </el-form-item>
         <el-form-item label="截止时间">
@@ -373,6 +415,20 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 const authStore = useAuthStore()
 const router = useRouter()
 
+type AssignmentLanguage = 'cpp' | 'python'
+
+const defaultAssignmentTemplates: Record<AssignmentLanguage, string> = {
+  cpp:
+    '#include <iostream>\nusing namespace std;\n\nint main() {\n    // TODO: 在这里实现你的逻辑\n    cout << "hello world" << endl;\n    return 0;\n}\n',
+  python:
+    'def solve():\n    # TODO: 在这里实现你的逻辑\n    pass\n\nif __name__ == "__main__":\n    solve()\n',
+}
+
+const normalizeAssignmentLanguage = (language?: string): AssignmentLanguage =>
+  language === 'python' ? 'python' : 'cpp'
+
+const getDefaultAssignmentTemplate = (language: AssignmentLanguage) => defaultAssignmentTemplates[language]
+
 const loading = ref(false)
 const studentsLoading = ref(false)
 const activeModule = ref('class')
@@ -394,6 +450,10 @@ const creatingAssignment = ref(false)
 const assignmentForm = ref({
   title: '',
   description: '',
+  language: 'cpp' as AssignmentLanguage,
+  exampleInput: '',
+  exampleOutput: '',
+  starterCode: getDefaultAssignmentTemplate('cpp'),
   dueDate: '',
 })
 
@@ -649,9 +709,23 @@ const openAssignmentDialog = () => {
   assignmentForm.value = {
     title: '',
     description: '',
+    language: 'cpp',
+    exampleInput: '',
+    exampleOutput: '',
+    starterCode: getDefaultAssignmentTemplate('cpp'),
     dueDate: '',
   }
   assignmentDialogVisible.value = true
+}
+
+const handleAssignmentLanguageChange = (language: string) => {
+  const normalized = normalizeAssignmentLanguage(language)
+  const knownTemplates = Object.values(defaultAssignmentTemplates).map((template) => template.trim())
+  const currentTemplate = assignmentForm.value.starterCode.trim()
+  if (!currentTemplate || knownTemplates.includes(currentTemplate)) {
+    assignmentForm.value.starterCode = getDefaultAssignmentTemplate(normalized)
+  }
+  assignmentForm.value.language = normalized
 }
 
 const submitAssignment = async () => {
@@ -666,6 +740,10 @@ const submitAssignment = async () => {
     await request.post('/assignments/', {
       title,
       description: assignmentForm.value.description.trim() || null,
+      language: assignmentForm.value.language,
+      example_input: assignmentForm.value.exampleInput.trim() || null,
+      example_output: assignmentForm.value.exampleOutput.trim() || null,
+      starter_code: assignmentForm.value.starterCode.trim() || null,
       due_date: assignmentForm.value.dueDate || null,
     })
     ElMessage.success('作业创建成功')
@@ -676,6 +754,32 @@ const submitAssignment = async () => {
     ElMessage.error(detail || '创建作业失败')
   } finally {
     creatingAssignment.value = false
+  }
+}
+
+const deleteAssignment = async (row: any) => {
+  try {
+    await ElMessageBox.confirm(
+      `确认删除作业 ${row.title} 吗？该作业的提交记录和反馈也会一起删除。`,
+      '提示',
+      {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+      }
+    )
+
+    await request.delete(`/assignments/${row.id}`)
+    ElMessage.success('作业删除成功')
+    if (selectedAssignmentId.value === row.id) {
+      selectedAssignmentId.value = null
+    }
+    await reloadAll()
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      const detail = error?.response?.data?.detail
+      ElMessage.error(detail || '删除作业失败')
+    }
   }
 }
 

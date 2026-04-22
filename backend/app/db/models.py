@@ -65,6 +65,10 @@ class Assignment(Base):
     course_id: Mapped[int] = mapped_column(ForeignKey("courses.id"))
     title: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=True)
+    language: Mapped[str] = mapped_column(String, nullable=False, default="cpp")
+    starter_code: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    example_input: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    example_output: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     due_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     allowed_concepts: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True) # List of concepts
     rubric_id: Mapped[Optional[int]] = mapped_column(ForeignKey("rubrics.id"), nullable=True)

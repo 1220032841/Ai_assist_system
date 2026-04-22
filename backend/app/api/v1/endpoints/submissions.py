@@ -24,40 +24,40 @@ async def _delete_submission_related_rows(db: AsyncSession, submission_id: int) 
     await db.execute(delete(Submission).where(Submission.id == submission_id))
 
 
-def _get_assignment_starter_code(assignment_id: int, language: str) -> Optional[str]:
+def _normalize_assignment_language(language: Optional[str]) -> str:
+    normalized = (language or "cpp").strip().lower()
+    return "python" if normalized == "python" else "cpp"
+
+
+def _default_assignment_starter_code(language: str) -> Optional[str]:
     if language == "python":
-        # Keep this aligned with frontend assignment templates.
-        catalog = {
-            1: "def fibonacci(n):\n    # 请在此实现\n    pass",
-            2: (
-                "class ListNode:\n"
-                "    def __init__(self, val=0, next=None):\n"
-                "        self.val = val\n"
-                "        self.next = next\n\n"
-                "def reverse_linked_list(head):\n"
-                "    # 请在此实现\n"
-                "    pass"
-            ),
-        }
-        return catalog.get(assignment_id)
+        return (
+            "def solve():\n"
+            "    # TODO: 在这里实现你的逻辑\n"
+            "    pass\n\n"
+            "if __name__ == '__main__':\n"
+            "    solve()\n"
+        )
 
     if language == "cpp":
-        # Keep this aligned with frontend C++ starter templates.
-        catalog = {
-            1: (
-                "#include <iostream>\n"
-                "using namespace std;\n\n"
-                "int main() {\n"
-                "    long long a, b;\n"
-                "    cin >> a >> b;\n\n"
-                "    // TODO: 输出 a+b 和 a-b\n\n"
-                "    return 0;\n"
-                "}\n"
-            ),
-        }
-        return catalog.get(assignment_id)
+        return (
+            "#include <iostream>\n"
+            "using namespace std;\n\n"
+            "int main() {\n"
+            "    // TODO: 在这里实现你的逻辑\n"
+            "    cout << \"hello world\" << endl;\n"
+            "    return 0;\n"
+            "}\n"
+        )
 
     return None
+
+
+def _get_assignment_starter_code(assignment: Assignment, language: str) -> Optional[str]:
+    starter_code = (assignment.starter_code or "").rstrip() if assignment else ""
+    if starter_code:
+        return starter_code
+    return _default_assignment_starter_code(language)
 
 
 def _filter_starter_template_issues(
@@ -449,6 +449,11 @@ async def create_submission(
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
 
+    expected_language = _normalize_assignment_language(getattr(assignment, "language", None))
+    submitted_language = _normalize_assignment_language(submission_in.language)
+    if submitted_language != expected_language:
+        raise HTTPException(status_code=400, detail=f"This assignment only accepts {expected_language} submissions")
+
     version_stmt = select(func.max(Submission.version)).where(
         Submission.assignment_id == submission_in.assignment_id,
         Submission.student_id == current_user.id,
@@ -457,7 +462,7 @@ async def create_submission(
     next_version = (version_result.scalar() or 0) + 1
 
     # Normalize common pasted indentation to avoid false "unexpected indent" errors.
-    normalized_code = _normalize_submission_code(submission_in.code_content, submission_in.language)
+    normalized_code = _normalize_submission_code(submission_in.code_content, expected_language)
     if not normalized_code.strip():
         raise HTTPException(status_code=400, detail="Code content cannot be empty")
     
@@ -465,7 +470,7 @@ async def create_submission(
         assignment_id=submission_in.assignment_id,
         student_id=current_user.id,
         code_content=normalized_code,
-        language=submission_in.language,
+        language=expected_language,
         version=next_version,
     )
     db.add(submission)
@@ -489,7 +494,7 @@ async def create_submission(
     
     analysis_summary = static_analyzer.analyze(submission.code_content, submission.language)
 
-    starter_code = _get_assignment_starter_code(submission.assignment_id, submission.language)
+    starter_code = _get_assignment_starter_code(assignment, submission.language)
     student_non_template_line_count: Optional[int] = None
     template_only_submission = False
     cpp_non_template_code = normalized_code
