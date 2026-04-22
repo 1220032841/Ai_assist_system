@@ -2,6 +2,38 @@ from typing import List
 from app.db.models import Document, Submission, ExecutionResult, StaticAnalysisResult
 
 class LLMService:
+    def _is_trivial_success_case(
+        self,
+        submission: Submission,
+        execution_result: ExecutionResult,
+        static_analysis: StaticAnalysisResult,
+    ) -> bool:
+        assignment = submission.assignment
+        assignment_text = (
+            f"{assignment.title if assignment else ''} "
+            f"{assignment.description if assignment and assignment.description else ''}"
+        ).lower()
+        code_text = submission.code_content or ""
+        non_empty_lines = [line for line in code_text.splitlines() if line.strip()]
+        static_issues = (static_analysis.issues if static_analysis and static_analysis.issues else "").strip().lower()
+
+        beginner_keywords = [
+            "hello world",
+            "hello",
+            "first program",
+            "print",
+            "输出",
+            "入门",
+            "第一个",
+        ]
+        has_beginner_signal = any(keyword in assignment_text for keyword in beginner_keywords)
+        has_clean_run = execution_result.exit_code == 0 and not (execution_result.stderr or "").strip()
+        has_no_real_static_issue = static_issues in ("", "none", "[]", "{}")
+
+        return has_clean_run and has_no_real_static_issue and (
+            has_beginner_signal or len(non_empty_lines) <= 10
+        )
+
     async def generate_feedback(
         self, 
         submission: Submission, 
@@ -21,6 +53,19 @@ class LLMService:
         submission_language = (submission.language or "cpp").lower()
         assignment_language = ((getattr(assignment, "language", None) or submission_language) if assignment else submission_language).lower()
         code_fence_language = "cpp" if submission_language == "cpp" else submission_language
+        is_trivial_success_case = self._is_trivial_success_case(
+            submission,
+            execution_result,
+            static_analysis,
+        )
+        feedback_policy = (
+            "This is a very simple beginner exercise or a short correct program. "
+            "Do not be overly strict or nitpicky. If the code is correct, clearly say it is correct first. "
+            "Do not criticize large-project style conventions such as avoiding using namespace std, adding comments everywhere, architecture, extensibility, or performance tuning unless the assignment explicitly requires them or they cause a real problem. "
+            "If you give improvement advice, keep it optional and limit it to at most one small suggestion."
+            if is_trivial_success_case
+            else "Focus on concrete issues that are supported by the code, execution result, static analysis, or course context. If there are no clear problems, say so directly instead of inventing generic style criticism."
+        )
         
         prompt = f"""
         You are an AI teaching assistant. Analyze the student's code submission.
@@ -52,10 +97,14 @@ class LLMService:
         
         Static Analysis Issues:
         {static_analysis.issues if static_analysis else 'None'}
+
+        Feedback Policy:
+        {feedback_policy}
         
         Task:
         Provide constructive feedback in the student's preferred language (English or Chinese). Detected from code comments or default to Chinese if unsure.
         Treat the assignment's expected programming language as authoritative. Do not claim a language mismatch unless the student's submitted language differs from the expected language.
+        Only mention problems that are actually supported by the provided evidence.
         1. Point out errors or bad practices. / 指出错误或不良实践。
         2. Cite the course material context where applicable. / 在适用的情况下引用课程材料上下文。
         3. Do NOT give the full solution. / 不要给出完整的解决方案。
